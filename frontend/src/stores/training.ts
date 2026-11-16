@@ -1,0 +1,1 @@
+import {reactive} from 'vue';import {trainingApi} from '../api/training';import type {Training} from '../types/domain';export function useTraining(){const state=reactive({jobs:[] as Training[],error:''});async function reload(){try{state.jobs=await trainingApi.list();state.error=''}catch(e){state.error=e.message}}return {state,reload}}

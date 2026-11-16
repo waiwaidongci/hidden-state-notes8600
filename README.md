@@ -2,7 +2,7 @@
 
 燕汐试验设备组的18位序列分析员把离散观测码与固定HMM假设相对照，再回看独立设备记录。上游是 `yx-fixed-hmm-1-202611.json` 等编码轨迹与已声明参数，下游是负责人批准的工况核对说明。三个具体痛点是单点最高后验被拼成“真实路径”、长序列概率相乘下溢、模型版本与观测来源混淆。
 
-本项目固定π/A/B，不训练、不做EM。log域前向后向给边际后验，log Viterbi给整段联合MAP；状态名称只是模型假设，不是故障事实或在线告警。固定seed生成3项研究、3个三态四码模型，每组80条40码轨迹，共240条；默认每次选择前20条。
+本项目保留固定π/A/B的推断口径（log域前向后向给边际后验，log Viterbi给整段联合MAP；状态名称只是模型假设，不是故障事实或在线告警），并在独立的“页面约束训练”页按多条独立轨迹做带约束的Baum-Welch（EM）：训练只产出新的模型版本，冻结的初始版本、既有推断与已批准核对说明均不被改写。固定seed生成3项研究、3个三态四码模型，每组80条40码轨迹，共240条；推断默认每次选择前20条。
 
 ## 启动和角色
 
@@ -56,9 +56,20 @@ Viterbi在相同log空间用max替代sum，保留每个状态的最佳前缀路�
 
 跨轨迹的logL和是所选记录的描述性总和；将其解释为联合likelihood还需要轨迹间独立。后验和路径都条件于固定模型，未估计参数不确定性、真实故障准确率或在线告警能力。
 
+## 页面约束训练（分批 Baum-Welch）
+
+“页面约束训练”页用多条独立轨迹一起学习初态π、转移A、发射B，不再手填参数。提交时同时冻结初始模型版本与所选轨迹快照（`training_jobs.profile_snapshot/trace_snapshot`），之后修订源记录不影响训练输入；旧推断与已批准核对说明完全不变。
+
+- 期望计数：每条轨迹在log域跑前向后向，得到γ（状态边际）、ξ（相邻状态对期望数）与按观测码累计的发射期望数；批内对各轨迹求和后写入 `training_batches`（π/转移/发射期望计数、批次logL、码数、状态pending/saved），`UNIQUE(job_id,iteration,batch_index)` 保证每个轮次槽位只有一行。
+- 零约束：M步只做期望计数行归一。预设为0的位置期望计数恒为0，归一后仍是精确0，不加epsilon或概率地板；某行期望计数总和为0（该行无观测支持）时整行保留上一轮原值，不凭空造分布。
+- 逐轮总对数似然与下降不发布：每轮记录轮前总logL（各批次logL的`math.fsum`）与候选参数下重新计算的总logL；仅当候选严格更高（容差1e-12防浮点抖动）才接受新参数，否则保留旧参数并在 `iteration_logs` 标记`not_increase_rejected`。拒绝轮或增益低于设定容差即收敛，最终发布且只发布一个新的 `ModelProfile`（命名含任务id，天然唯一），可直接用于固定模型推断。
+- 分批与崩溃恢复：每轮按`batch_size`切批，Celery任务持120秒可续约租约（`lease_owner/lease_expires_at`）。批次行用条件`UPDATE ... WHERE status='pending'`写入并带租约归属校验：进程在批次写入前崩溃，行仍为pending，重启重算该批；写入后崩溃，行已saved，重启跳过、不重算。重复投递在completed状态直接返回；旧执行的租约过期后才允许新进程接管，旧持有者的迟到写入被租约校验拦截，不重复累计、不覆盖新轮。
+- 观测在当前模型下出现全零路径时，E步抛“不可能序列”，任务标记failed且不发布半成品模型；不会把数值下溢误当不可能。
+- 校验：短序列（2态、3–4步、含结构零）对全部K^T条状态路径穷举，逐项核对γ/ξ/发射期望计数与logL；另用注入崩溃的SQLite测试实测“写入前/写入后中断→租约过期→恢复”，断言已保存批次不重算、最终只产生一个可推断版本，以及API层403/422/409与快照冻结。
+
 ## 实体、工程与校验
 
-78个有职责的Python/TS/Vue/CSS文件（不含空包、依赖和dist）。五实体SequenceStudy → ModelProfile → ObservationTrace → InferenceRun → InterpretationNote贯穿ORM/schema/service/routes、前端API/store和六页：隐态总览、观测与版本、固定模型推断、后验与联合路径、工况核对、过程留痕。
+在原五实体SequenceStudy → ModelProfile → ObservationTrace → InferenceRun → InterpretationNote之外，新增TrainingJob与TrainingBatch两个实体，贯穿ORM/schema/service/routes、前端API/store和七页：隐态总览、观测与版本、固定模型推断、页面约束训练、后验与联合路径、工况核对、过程留痕。训练审计动作`training.queued/training.published/training.failed`自动进入过程留痕。
 
 前端 `src/{api,stores,types,components/common,hooks,pages,router,utils,constants}`；后端 `src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}`，另scripts/seed_demo.py与migrations/。StateBands、InferenceSummary、ProfileMatrix、RunList多页复用，PosteriorGrid只展示后端后验；useTask/useRoute与format处理交互。Vue的id=app/mount('#app')匹配。
 

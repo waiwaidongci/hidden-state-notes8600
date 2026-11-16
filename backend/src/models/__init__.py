@@ -4,4 +4,6 @@ from .study import SequenceStudy
 from .profile import ModelProfile
 from .trace import ObservationTrace
 from .run import InferenceRun
+from .training import TrainingJob
+from .training_batch import TrainingBatch
 from .note import InterpretationNote

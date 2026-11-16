@@ -1,4 +1,6 @@
 -- Initial schema by SQLAlchemy metadata; create_all, not a production migration runner.
 -- sequence_studies(symbols JSON), observation_traces(study_id,reference UNIQUE,tokens JSON)
 -- model_profiles(parameters JSON,normalization_max_delta DOUBLE), inference_runs(profile_snapshot JSON,trace_snapshot JSON,result JSON,total_log_likelihood DOUBLE)
+-- training_jobs(profile_snapshot JSON,trace_snapshot JSON,current_parameters JSON,iteration_logs JSON,total_log_likelihood DOUBLE,lease_owner/lease_expires_at for crash-safe idempotent batches)
+-- training_batches(UNIQUE(job_id,iteration,batch_index),pi/transition/emission_counts JSON,log_likelihood DOUBLE,status pending/saved)
 -- interpretation_notes(result_snapshot JSON), users, audit_logs. DOUBLE mappings use asdecimal=False.

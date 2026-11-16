@@ -1,1 +1,1 @@
-<script setup lang="ts">import {RUN_STATUS,NOTE_STATUS} from '../../constants/enums';defineProps<{value:string}>();</script><template><span :class="['status',value]">{{RUN_STATUS[value]||NOTE_STATUS[value]||value}}</span></template>
+<script setup lang="ts">import {RUN_STATUS,NOTE_STATUS,TRAINING_STATUS} from '../../constants/enums';defineProps<{value:string}>();</script><template><span :class="['status',value]">{{RUN_STATUS[value]||TRAINING_STATUS[value]||NOTE_STATUS[value]||value}}</span></template>

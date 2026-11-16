@@ -8,6 +8,11 @@ class RunStatus(StrEnum):
  RUNNING='running'
  COMPLETED='completed'
  FAILED='failed'
+class TrainingStatus(StrEnum):
+ QUEUED='queued'
+ RUNNING='running'
+ COMPLETED='completed'
+ FAILED='failed'
 class NoteStatus(StrEnum):
  DRAFT='draft'
  APPROVED='approved'
